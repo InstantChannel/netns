@@ -17,32 +17,15 @@ function NetNS ip-address
   _namespaces[@name] = @
 
 NetNS.delete-all = (cb) ->
-  retries = {}
-  _namespaces |> keys ((ns) -> retries[ns] = 0)
-  pending = (retries |> keys).length
-  errors = []
-  retry-delete = (ns-name) ->
-    ns = _namespaces[ns-name]
-    (err) <- ns.delete
-    if err
-      console.error "error deleting namespace: #{ns.name} with IP: #{ns.ip-address}", err
-      if retries[ns-name]++ < _delete-all-retries
-        set-timeout (-> retry-delete ns-name), _delete-all-delay
-      else
-        errors.push err # only store last error for callback
-        pending--
-    else
-      pending--
-  _namespaces |> keys retry-delete
-  <- cbi = set-interval _, 1000ms
-  if pending <= 0
-    clear-interval cbi
-    if errors.length
-      err = new Error 'deletion error(s)'
-      err.namespaces = errors
-      cb err
-    else
+  pending = 0
+  (ns) <- Obj.each _, _namespaces
+  pending++
+  ns.delete (-> pending--)
+  timer = set-interval (->
+    if pending <= 0
+      clear-interval timer
       cb void
+  ), 100ms
 
 NetNS.prototype.create = (cb) ->
   unless @_exists!
