@@ -12,15 +12,16 @@ function NetNS ip-address, opts={}
     return that # allow only single instances of namespaces
   @ip-address = ip-address
   @name       = "ns#{ip-address.replace /\./g, \-}"
-  @opts       = opts
-  if @opts.auto-delete # set up a handler to destory namespace
+  @opts       = opts if typeof! opts is \Object
+  unless @opts.persist # default action is to set up a handler to destroy namespace on exit
     auto-delete-err = (err) ->
       if err
         console.error "error deleting namespace #{@name}", JSON.stringify(err, null, 2)
         process.exit 1
       process.exit 0
     process.on \beforeExit, (~> @delete auto-delete-err)
-    process.on \SIGINT, (~> @delete auto-delete-err)
+    process.on \SIGINT,     (~> @delete auto-delete-err)
+    process.on \SIGTERM,    (~> @delete auto-delete-err)
   _namespaces[@name] = @
 
 NetNS.prototype.create = (cb) ->
