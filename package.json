@@ -1,0 +1,25 @@
+{
+  "name": "netns",
+  "version": "1.0.0",
+  "description": "Network namespace management for Linux",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/InstantChannel/netns.git"
+  },
+  "keywords": [
+    "linux",
+    "netns",
+    "network",
+    "namespace"
+  ],
+  "author": "Dave Seleno <dave@instantchannelinc.com>",
+  "license": "GPLv3",
+  "bugs": {
+    "url": "https://github.com/InstantChannel/netns/issues"
+  },
+  "homepage": "https://github.com/InstantChannel/netns"
+}
