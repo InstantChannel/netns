@@ -21,5 +21,8 @@
   "bugs": {
     "url": "https://github.com/InstantChannel/netns/issues"
   },
-  "homepage": "https://github.com/InstantChannel/netns"
+  "homepage": "https://github.com/InstantChannel/netns",
+  "dependencies": {
+    "prelude-ls": "^1.1.2"
+  }
 }
