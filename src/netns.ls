@@ -4,25 +4,45 @@ require! {
 }
 global <<< require \prelude-ls
 
-_namespaces = {}
-_test-url   = \https://icanhazip.com
+_namespaces         = {}
+_test-url           = \https://icanhazip.com
+_delete-all-retries = 5 # delete retries when calling NetNS.delete-all()
+_delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 
-function NetNS ip-address, opts={}
+function NetNS ip-address
   if _namespaces[@name]
     return that # allow only single instances of namespaces
   @ip-address = ip-address
   @name       = "ns#{ip-address.replace /\./g, \-}"
-  @opts       = opts if typeof! opts is \Object
-  unless @opts.persist # default action is to set up a handler to destroy namespace on exit
-    auto-delete-err = (err) ->
-      if err
-        console.error "error deleting namespace #{@name}", JSON.stringify(err, null, 2)
-        process.exit 1
-      process.exit 0
-    process.on \beforeExit, (~> @delete auto-delete-err)
-    process.on \SIGINT,     (~> @delete auto-delete-err)
-    process.on \SIGTERM,    (~> @delete auto-delete-err)
   _namespaces[@name] = @
+
+NetNS.delete-all = (cb) ->
+  retries = {}
+  _namespaces |> keys ((ns) -> retries[ns] = 0)
+  pending = (retries |> keys).length
+  errors = []
+  retry-delete = (ns-name) ->
+    ns = _namespaces[ns-name]
+    (err) <- ns.delete
+    if err
+      console.error "error deleting namespace: #{ns.name} with IP: #{ns.ip-address}", err
+      if retries[ns-name]++ < _delete-all-retries
+        set-timeout (-> retry-delete ns-name), _delete-all-delay
+      else
+        errors.push err # only store last error for callback
+        pending--
+    else
+      pending--
+  _namespaces |> keys retry-delete
+  <- cbi = set-interval _, 1000ms
+  if pending <= 0
+    clear-interval cbi
+    if errors.length
+      err = new Error 'deletion error(s)'
+      err.namespaces = errors
+      cb err
+    else
+      cb void
 
 NetNS.prototype.create = (cb) ->
   unless @_exists!
@@ -75,13 +95,13 @@ NetNS.prototype.test = (cb) ->
       ..stderr.on \data, (-> err-buf += it)
     proc.on \close, (code) ~>
       if code is not 0
-        cb { +error, err-buf }
+        cb new Error err-buf
       else if data-buf is not "#{@ip-address}\n"
-        cb { +error, text: "IP mismatch: got: #data-buf but expected: #{@ip-address}\\n" }
+        cb new Error "IP mismatch: got: #data-buf but expected: #{@ip-address}\\n"
       else
         cb void
   else
-    cb { +error, text: "namespace doesn't seem to exist" }
+    cb new Error "namespace doesn't seem to exist"
 
 # see: https://gist.github.com/millermedeiros/4724047
 # spawn a child process and execute shell command
