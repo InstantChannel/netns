@@ -46,6 +46,10 @@ else
 
 In lieu of a formal styleguide, take care to maintain the existing coding style.
 
+## Special thanks
+
+To James Loosli <james@instantchannelinc.com> for authoring the shell script on which this library is based.
+
 ## Release History
 
 * 1.0.0 Initial release
