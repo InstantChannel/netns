@@ -9,7 +9,7 @@ Network namespace management for Linux.
 
 ## Usage
 
-'''livescript
+```
 require! {
   netns
 }
@@ -40,7 +40,7 @@ if err
   console.error "error deleting namespace", JSON.stringify(err, null, 2)
 else
   console.log "namespace deleted"
-'''
+```
 
 ## Contributing
 
