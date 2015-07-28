@@ -20,7 +20,7 @@ function NetNS ip-address, opts={}
         process.exit 1
       process.exit 0
     process.on \beforeExit, (~> @delete auto-delete-err)
-    process.on \SIGINT, ~> (@delete auto-delete-err)
+    process.on \SIGINT, (~> @delete auto-delete-err)
   _namespaces[@name] = @
 
 NetNS.prototype.create = (cb) ->
