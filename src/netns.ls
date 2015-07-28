@@ -7,13 +7,21 @@ global <<< require \prelude-ls
 _namespaces = {}
 _test-url   = \https://icanhazip.com
 
-function NetNS ip-address
+function NetNS ip-address, opts={}
   if _namespaces[@name]
     return that # allow only single instances of namespaces
   @ip-address = ip-address
   @name       = "ns#{ip-address.replace /\./g, \-}"
+  @opts       = opts
+  if @opts.auto-delete # set up a handler to destory namespace
+    auto-delete-err = (err) ->
+      if err
+        console.error "error deleting namespace #{@name}", JSON.stringify(err, null, 2)
+        process.exit 1
+      process.exit 0
+    process.on \beforeExit, (~> @delete auto-delete-err)
+    process.on \SIGINT, ~> (@delete auto-delete-err)
   _namespaces[@name] = @
-  #@create!
 
 NetNS.prototype.create = (cb) ->
   unless @_exists!
