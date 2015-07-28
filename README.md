@@ -52,4 +52,6 @@ To James Loosli <james@instantchannelinc.com> for authoring the shell script on 
 
 ## Release History
 
+* 1.1.2 Adds delete-all
+
 * 1.0.0 Initial release

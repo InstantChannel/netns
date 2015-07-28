@@ -10,10 +10,10 @@ _delete-all-retries = 5 # delete retries when calling NetNS.delete-all()
 _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 
 function NetNS ip-address
-  if _namespaces[@name]
-    return that # allow only single instances of namespaces
   @ip-address = ip-address
   @name       = "ns#{ip-address.replace /\./g, \-}"
+  if _namespaces[@name]
+    return that # allow only single instances of namespaces
   _namespaces[@name] = @
 
 NetNS.delete-all = (cb) ->
