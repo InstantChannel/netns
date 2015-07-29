@@ -96,7 +96,7 @@ NetNS.prototype.test = (cb) ->
 # execute a single shell command where "cmd" is a string
 function _exec cmd, cb
   parts = cmd.split /\s+/g
-  p = child_process.spawn parts.0, parts.slice(1), {stdio: \inherit}
+  p = child_process.spawn parts.0, parts.slice(1), {stdio: \ignore}
   p.on \exit, (code) ->
     var err
     if code
