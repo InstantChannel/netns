@@ -1,0 +1,22 @@
+#!/usr/bin/env lsc
+
+require! {
+  commander
+  netns: \../lib/netns
+}
+
+commander
+  .usage '[options]'
+  .option '-i, --ip <ip>' 'ip to create namespace'
+  .option '-c, --command <command>' 'command to exec in namespace'
+  .parse process.argv
+
+ns = new netns commander.ip
+(err, ns-proc) <- ns.run commander.command, _, { verify: false, persist: false }
+if err
+  console.error err
+  process.exit 1
+<- ns-proc.on \close
+console.log '`-all done'
+
+# vim:ft=ls fdm=indent
