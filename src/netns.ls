@@ -16,15 +16,25 @@ function NetNS ip-address
     return that # allow only single instances of namespaces
   _namespaces[@name] = @
 
-NetNS.delete-all = (cb) ->
+NetNS.delete-all = (cb, retries=_delete-all-retries) ->
   pending = 0
   (ns) <- Obj.each _, _namespaces
   pending++
   ns.delete (-> pending--)
   timer = set-interval (->
-    if pending <= 0
+    unless pending
       clear-interval timer
-      cb void
+      existing = Obj.filter (._exists!), _namespaces
+      if (keys existing).length
+        if retries
+          <- set-timeout _, _delete-all-delay
+          NetNS.delete-all cb, retries - 1
+        else
+          error = new Error "failed to delete some namespaces"
+          error.namespaces = existing
+          cb error
+      else
+        cb void
   ), 100ms
 
 NetNS.prototype.create = (cb) ->
@@ -70,7 +80,7 @@ NetNS.prototype._exists = ->
 
 NetNS.prototype.test = (cb) ->
   if @_exists!
-    cmd = "ip netns exec #{@name} curl #{_test-url}"
+    cmd = "ip netns exec #{@name} curl -A www.npmjs.com/package/netns #{_test-url}"
     data-buf = err-buf = ''
     proc = child_process.exec cmd
     proc
