@@ -12,6 +12,7 @@ _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 function NetNS ip-address
   @ip-address = ip-address
   @name       = "ns#{ip-address.replace /\./g, \-}"
+  @_verified    = false
   if _namespaces[@name]
     return that # allow only single instances of namespaces
   _namespaces[@name] = @
@@ -36,6 +37,31 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
       else
         cb void
   ), 100ms
+
+NetNS.prototype.run = (command, cb, opts={ verify: false, persist: false }) ->
+  (create-err) <~ @create
+  if create-err
+    (delete-err) <- netns.delete # delete ((potentially) partially-created) namespace
+    create-err.deletion-error = delete-err if delete-err
+    cb create-err
+  else
+    run = ~>
+      ns-wrap = "ip netns exec #{@name} #{command}".split ' '
+      ns-proc = child_process.spawn command.0, command.slice(1), { stdio: \inherit }
+        ..on \close, ~>
+          unless opts.persist
+            <~ set-timeout _, 500ms
+            (delete-err) <- @delete
+            # shouldn't throw from an async since it can't be caught, but we
+            # already called callback so that we could give back ns-proc.
+            # better to do nothing.
+            #throw delete-err if delete-err
+      cb void, ns-proc
+    if ! @_verified and opts.verify
+      (test-err) <~ @_test
+      if test-err then cb test-err else run!
+    else
+      run!
 
 NetNS.prototype.create = (cb) ->
   unless @_exists!
@@ -79,6 +105,7 @@ NetNS.prototype._exists = ->
   fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
 
 NetNS.prototype.test = (cb) ->
+  @_verified = false
   if @_exists!
     cmd = "ip netns exec #{@name} curl -A www.npmjs.com/package/netns #{_test-url}"
     data-buf = err-buf = ''
@@ -92,6 +119,7 @@ NetNS.prototype.test = (cb) ->
       else if data-buf is not "#{@ip-address}\n"
         cb new Error "IP mismatch: got: #data-buf but expected: #{@ip-address}\\n"
       else
+        @_verified = true
         cb void
   else
     cb new Error "namespace doesn't seem to exist"
