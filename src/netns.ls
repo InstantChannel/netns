@@ -1,6 +1,7 @@
 require! {
   child_process
   fs
+  ip
 }
 global <<< require \prelude-ls
 
@@ -11,7 +12,9 @@ _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 
 function NetNS ip-address
   @ip-address = ip-address
-  @name       = "ns#{ip-address.replace /\./g, \-}"
+  @_long      = ip.to-long ip-address
+  @name       = "ns#{@_long}"
+  @_verified  = false
   if _namespaces[@name]
     return that # allow only single instances of namespaces
   _namespaces[@name] = @
@@ -32,14 +35,35 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
         else
           error = new Error "failed to delete some namespaces"
           error.namespaces = existing
-          cb error
+          cb error if cb
       else
-        cb void
+        cb void if cb
   ), 100ms
+
+NetNS.prototype.run = (command, cb, opts={ -verify }) ->
+  (create-err) <~ @create
+  if create-err
+    (delete-err) <- @delete # delete ((potentially) partially-created) namespace
+    if delete-err
+      create-err.deletion-error = delete-err 
+      cb create-err
+  else
+    run = ~>
+      ns-wrap = "ip netns exec #{@name} #{command}".split ' '
+      ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \pipe }
+      cb void, ns-proc
+    if ! @_verified and opts.verify
+      (test-err) <~ @test
+      if test-err
+        cb test-err
+      else
+        run!
+    else
+      run!
 
 NetNS.prototype.create = (cb) ->
   unless @_exists!
-    name-suffix  = @ip-address.replace /\./g, \-
+    name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
     _exec-series [
       "ip netns add ns#{name-suffix}" # create ns
@@ -58,20 +82,24 @@ NetNS.prototype.create = (cb) ->
 
       "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], cb
+    ], ((err) ->
+      if err then cb err else cb void
+    )
   else # assume it exists and return success
     cb void
 
 NetNS.prototype.delete = (cb) ->
   if @_exists!
-    name-suffix  = @ip-address.replace /\./g, \-
+    name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
     _exec-series [
       "ip netns del ns#{name-suffix}"
       "ip link del d#{name-suffix}"
       "iptables -t nat -D PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], cb
+    ], ((err) ->
+      if err then cb err else cb void
+    )
   else # assume it doesn't exist and return success
     cb void
 
@@ -79,6 +107,7 @@ NetNS.prototype._exists = ->
   fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
 
 NetNS.prototype.test = (cb) ->
+  @_verified = false
   if @_exists!
     cmd = "ip netns exec #{@name} curl -A www.npmjs.com/package/netns #{_test-url}"
     data-buf = err-buf = ''
@@ -92,6 +121,7 @@ NetNS.prototype.test = (cb) ->
       else if data-buf is not "#{@ip-address}\n"
         cb new Error "IP mismatch: got: #data-buf but expected: #{@ip-address}\\n"
       else
+        @_verified = true
         cb void
   else
     cb new Error "namespace doesn't seem to exist"
@@ -125,5 +155,7 @@ function _exec-series cmds, cb
       else
         if cmds.length then exec-next! else cb void
   exec-next!
+
+process.once \beforeExit, NetNS.delete-all
 
 module.exports = NetNS
