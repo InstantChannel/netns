@@ -35,12 +35,12 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
         else
           error = new Error "failed to delete some namespaces"
           error.namespaces = existing
-          cb error
+          cb error if cb
       else
-        cb void
+        cb void if cb
   ), 100ms
 
-NetNS.prototype.run = (command, cb, opts={ verify: false, persist: false }) ->
+NetNS.prototype.run = (command, cb, opts={ -verify }) ->
   (create-err) <~ @create
   if create-err
     (delete-err) <- @delete # delete ((potentially) partially-created) namespace
@@ -51,14 +51,6 @@ NetNS.prototype.run = (command, cb, opts={ verify: false, persist: false }) ->
     run = ~>
       ns-wrap = "ip netns exec #{@name} #{command}".split ' '
       ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \pipe }
-        ..on \close, ~>
-          unless opts.persist
-            <~ set-timeout _, 500ms
-            (delete-err) <- @delete
-            # shouldn't throw from an async since it can't be caught, but we
-            # already called callback so that we could give back ns-proc.
-            # better to do nothing.
-            #throw delete-err if delete-err
       cb void, ns-proc
     if ! @_verified and opts.verify
       (test-err) <~ @test
@@ -163,5 +155,7 @@ function _exec-series cmds, cb
       else
         if cmds.length then exec-next! else cb void
   exec-next!
+
+process.once \beforeExit, NetNS.delete-all
 
 module.exports = NetNS
