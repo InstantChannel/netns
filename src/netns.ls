@@ -56,7 +56,7 @@ NetNS.prototype.run = (command, cb, opts={ verify: false, persist: false }) ->
       #console.log '`-run'
       ns-wrap = "ip netns exec #{@name} #{command}".split ' '
       #console.log "`-ns-wrap: #{ns-wrap.join ' '}"
-      ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \inherit }
+      ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \pipe }
         ..on \close, ~>
           #console.log '`-ns-proc.on close'
           unless opts.persist

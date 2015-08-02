@@ -24,6 +24,8 @@ ns = new netns commander.ip
 if err
   console.error err
   process.exit 1
+ns-proc.stdout.on \data, (data) ->
+  console.log "event data: #data"
 <- ns-proc.on \close
 console.log '`-all done'
 
