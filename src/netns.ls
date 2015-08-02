@@ -1,6 +1,7 @@
 require! {
   child_process
   fs
+  ip
 }
 global <<< require \prelude-ls
 
@@ -11,8 +12,9 @@ _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 
 function NetNS ip-address
   @ip-address = ip-address
-  @name       = "ns#{ip-address.replace /\./g, \-}"
-  @_verified    = false
+  @_long      = ip.to-long ip-address
+  @name       = "ns#{@_long}"
+  @_verified  = false
   if _namespaces[@name]
     return that # allow only single instances of namespaces
   _namespaces[@name] = @
@@ -80,7 +82,7 @@ NetNS.prototype.run = (command, cb, opts={ verify: false, persist: false }) ->
 
 NetNS.prototype.create = (cb) ->
   unless @_exists!
-    name-suffix  = @ip-address.replace /\./g, \-
+    name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
     _exec-series [
       "ip netns add ns#{name-suffix}" # create ns
@@ -105,7 +107,7 @@ NetNS.prototype.create = (cb) ->
 
 NetNS.prototype.delete = (cb) ->
   if @_exists!
-    name-suffix  = @ip-address.replace /\./g, \-
+    name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
     _exec-series [
       "ip netns del ns#{name-suffix}"
