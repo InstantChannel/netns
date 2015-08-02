@@ -42,38 +42,27 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
 
 NetNS.prototype.run = (command, cb, opts={ verify: false, persist: false }) ->
   (create-err) <~ @create
-  #console.log '`-@create'
   if create-err
-    #console.log '`-@create had error'
     (delete-err) <- @delete # delete ((potentially) partially-created) namespace
-    #console.log '`-@delete'
     if delete-err
-      #console.log '`-@delete had error'
       create-err.deletion-error = delete-err 
       cb create-err
   else
     run = ~>
-      #console.log '`-run'
       ns-wrap = "ip netns exec #{@name} #{command}".split ' '
-      #console.log "`-ns-wrap: #{ns-wrap.join ' '}"
       ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \pipe }
         ..on \close, ~>
-          #console.log '`-ns-proc.on close'
           unless opts.persist
             <~ set-timeout _, 500ms
             (delete-err) <- @delete
-            #console.log '`-run @delete'
             # shouldn't throw from an async since it can't be caught, but we
             # already called callback so that we could give back ns-proc.
             # better to do nothing.
             #throw delete-err if delete-err
-      #console.log '`-run cb void, ns-proc'
       cb void, ns-proc
     if ! @_verified and opts.verify
       (test-err) <~ @test
-      #console.log '`-@test'
       if test-err
-        #console.log '`-@test had error'
         cb test-err
       else
         run!
@@ -101,7 +90,9 @@ NetNS.prototype.create = (cb) ->
 
       "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], cb
+    ], ((err) ->
+      if err then cb err else cb void
+    )
   else # assume it exists and return success
     cb void
 
@@ -114,7 +105,9 @@ NetNS.prototype.delete = (cb) ->
       "ip link del d#{name-suffix}"
       "iptables -t nat -D PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], cb
+    ], ((err) ->
+      if err then cb err else cb void
+    )
   else # assume it doesn't exist and return success
     cb void
 
