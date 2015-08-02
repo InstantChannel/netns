@@ -44,7 +44,7 @@ else
 
 ## Contributing
 
-In lieu of a formal styleguide, take care to maintain the existing coding style.
+Please edit the LiveScript under the *src* dir. Run `make build` and commit the *src* and *lib* dirs.
 
 ## Special thanks
 
