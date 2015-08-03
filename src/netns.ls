@@ -157,5 +157,11 @@ function _exec-series cmds, cb
   exec-next!
 
 process.once \beforeExit, NetNS.delete-all
+process.once \SIGINT, -> 
+  <- NetNS.delete-all
+  process.exit 130
+process.once \SIGTERM, -> 
+  <- NetNS.delete-all
+  process.exit 143
 
 module.exports = NetNS
