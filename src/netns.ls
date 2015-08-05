@@ -82,7 +82,7 @@ NetNS.prototype.create = (cb) ->
 
       "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], ((err) ->
+    ], false, ((err) ->
       if err then cb err else cb void
     )
   else # assume it exists and return success
@@ -92,12 +92,12 @@ NetNS.prototype.delete = (cb) ->
   if @_exists!
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    _exec-series [
+    _exec-series [ # execute all commands regardless of errors
       "ip netns del ns#{name-suffix}"
       "ip link del d#{name-suffix}"
       "iptables -t nat -D PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], ((err) ->
+    ], true, ((err) ->
       if err then cb err else cb void
     )
   else # assume it doesn't exist and return success
@@ -147,10 +147,10 @@ function _exec cmd, cb
 
 # execute multiple commands in series
 # this could be replaced by any flow control lib
-function _exec-series cmds, cb
+function _exec-series cmds, no-errors, cb
   exec-next = ->
     _exec cmds.shift!, (err) ->
-      if err
+      if ! no-errors and err
         cb err
       else
         if cmds.length then exec-next! else cb void
