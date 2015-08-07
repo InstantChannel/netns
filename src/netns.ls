@@ -156,12 +156,12 @@ function _exec-series cmds, no-errors, cb
         if cmds.length then exec-next! else cb void
   exec-next!
 
-process.once \beforeExit, NetNS.delete-all
-process.once \SIGINT, -> 
-  <- NetNS.delete-all
-  process.exit 130
-process.once \SIGTERM, -> 
-  <- NetNS.delete-all
-  process.exit 143
+#process.once \beforeExit, NetNS.delete-all
+#process.once \SIGINT, -> 
+#  <- NetNS.delete-all
+#  process.exit 130
+#process.once \SIGTERM, -> 
+#  <- NetNS.delete-all
+#  process.exit 143
 
 module.exports = NetNS
