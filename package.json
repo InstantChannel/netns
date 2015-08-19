@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/InstantChannel/netns",
   "dependencies": {
+    "async": "^1.4.2",
     "ip": "^0.3.3",
     "prelude-ls": "^1.1.2"
   }

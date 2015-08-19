@@ -2,6 +2,7 @@ require! {
   child_process
   fs
   ip
+  async
 }
 global <<< require \prelude-ls
 
@@ -62,10 +63,13 @@ NetNS.prototype.run = (command, cb, opts={ -verify }) ->
       run!
 
 NetNS.prototype.create = (cb) ->
-  unless @_exists!
+  (err, exists) <~ @_exists
+  if err
+    cb err
+  else if exists in [ false, null ] # (re-)create if doesn't (or does partially) exist
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    _exec-series [
+    async.series [
       "ip netns add ns#{name-suffix}" # create ns
       "ip netns exec ns#{name-suffix} ip link set lo up"
 
@@ -82,33 +86,77 @@ NetNS.prototype.create = (cb) ->
 
       "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], false, ((err) ->
+    ], ((cmd, cb) ->
+      (err, stdout, stderr) <- child_process.exec cmd
+      if err
+        console.error 'NetNS.create error: ', cmd, stderr
+        cb err 
+      else
+        cb void
+    ), ((err) ->
       if err then cb err else cb void
     )
-  else # assume it exists and return success
+  else # if exists is true # assume it exists and return success
     cb void
 
 NetNS.prototype.delete = (cb) ->
-  if @_exists!
+  (err, exists) <~ @_exists
+  if err
+    cb err
+  else if exists in [ true, null ] # (re-)delete if does (or does partially) exist
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    _exec-series [ # execute all commands regardless of errors
+    async.series [ # execute all commands regardless of errors
       "ip netns del ns#{name-suffix}"
       "ip link del d#{name-suffix}"
       "iptables -t nat -D PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
       "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], true, ((err) ->
+    ], ((cmd, cb) ->
+      (err, stdout, stderr) <- child_process.exec cmd
+      if err
+        console.error 'NetNS.delete error: ', cmd, stderr
+        cb err 
+      else
+        cb void
+    ), ((err) ->
       if err then cb err else cb void
     )
-  else # assume it doesn't exist and return success
+  else # if exists is false # assume it exists and return success
     cb void
 
-NetNS.prototype._exists = ->
-  fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
+NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be true, false, or null (partially exists)
+  last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
+
+  pre-routing-exists = false
+  post-routing-exists = false
+  netns-exists = fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
+  (err, stdout, stderr) <~ child_process.exec 'iptables -t nat -L -n'
+  console.log stdout
+  if err # unknown error so report back null to be safe
+    console.error stderr
+    return cb void, null
+  else
+    if stdout.index-of(@ip-address) isnt -1 and stdout.index-of("to:10.#last2-octets.1") isnt -1
+      pre-routing-exists := true
+    if stdout.index-of("10.#last2-octets.0/31") isnt -1 and stdout.index-of("to:#{@ip-address}") isnt -1
+      post-routing-exists := true
+    tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
+    console.log tests
+    if all (is true), tests
+      return cb void, true
+    else if any (is true), tests
+      return cb void, null
+    else if all (is false), tests
+      return cb void, false
+    else # guard
+      return cb void, null
 
 NetNS.prototype.test = (cb) ->
   @_verified = false
-  if @_exists!
+  (err, exists) <~ @_exists
+  if err
+    cb err
+  else if exists is true # (re-)delete if does (or does partially) exist
     cmd = "ip netns exec #{@name} curl -A www.npmjs.com/package/netns #{_test-url}"
     data-buf = err-buf = ''
     proc = child_process.exec cmd
@@ -125,36 +173,6 @@ NetNS.prototype.test = (cb) ->
         cb void
   else
     cb new Error "namespace doesn't seem to exist"
-
-# see: https://gist.github.com/millermedeiros/4724047
-# spawn a child process and execute shell command
-# borrowed from https://github.com/mout/mout/ build script
-# author Miller Medeiros
-# released under MIT License
-# version: 0.1.0 (2013/02/01)
-
-# execute a single shell command where "cmd" is a string
-function _exec cmd, cb
-  parts = cmd.split /\s+/g
-  p = child_process.spawn parts.0, parts.slice(1), {stdio: \ignore}
-  p.on \exit, (code) ->
-    var err
-    if code
-      err = new Error "command #cmd exited with wrong status code #code"
-      err.code = code
-      err.cmd  = cmd
-    if cb then cb err else cb void
-
-# execute multiple commands in series
-# this could be replaced by any flow control lib
-function _exec-series cmds, no-errors, cb
-  exec-next = ->
-    _exec cmds.shift!, (err) ->
-      if ! no-errors and err
-        cb err
-      else
-        if cmds.length then exec-next! else cb void
-  exec-next!
 
 #process.once \beforeExit, NetNS.delete-all
 #process.once \SIGINT, -> 
