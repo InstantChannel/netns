@@ -131,7 +131,6 @@ NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be
   post-routing-exists = false
   netns-exists = fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
   (err, stdout, stderr) <~ child_process.exec 'iptables -t nat -L -n'
-  console.log stdout
   if err # unknown error so report back null to be safe
     console.error stderr
     return cb void, null
@@ -141,7 +140,6 @@ NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be
     if stdout.index-of("10.#last2-octets.0/31") isnt -1 and stdout.index-of("to:#{@ip-address}") isnt -1
       post-routing-exists := true
     tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
-    console.log tests
     if all (is true), tests
       return cb void, true
     else if any (is true), tests
