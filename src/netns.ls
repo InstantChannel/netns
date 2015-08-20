@@ -69,33 +69,46 @@ NetNS.prototype.create = (cb) ->
   else if exists in [ false, null ] # (re-)create if doesn't (or does partially) exist
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    async.series [
-      "ip netns add ns#{name-suffix}" # create ns
-      "ip netns exec ns#{name-suffix} ip link set lo up"
+    (err, table) <~ @_get-table
+    if err # unknown error so report back null to be safe
+      console.error stderr
+      cb err
+    else
+      # handle partially existing namespaces
+      pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
+      post-routing-exists = @_find-rule table, \POST # POSTROUTING
+      netns-exists        = @_netns-exists!
+      commands = []
+      unless netns-exists
+        commands = commands.concat([
+          "ip netns add ns#{name-suffix}" # create ns
+          "ip netns exec ns#{name-suffix} ip link set lo up"
 
-      "ip link add d#{name-suffix} type veth peer name v#{name-suffix}" # create d and v
-      "ip link set up d#{name-suffix}"
+          "ip link add d#{name-suffix} type veth peer name v#{name-suffix}" # create d and v
+          "ip link set up d#{name-suffix}"
 
-      "ip link set v#{name-suffix} netns ns#{name-suffix}" # add v to ns
-      "ip netns exec ns#{name-suffix} ip link set v#{name-suffix} up"
+          "ip link set v#{name-suffix} netns ns#{name-suffix}" # add v to ns
+          "ip netns exec ns#{name-suffix} ip link set v#{name-suffix} up"
 
-      "ip addr add 10.#{last2-octets}.0/31 dev d#{name-suffix}" # add IP addresses to d and v
-      "ip netns exec ns#{name-suffix} ip addr add 10.#{last2-octets}.1/31 dev v#{name-suffix}"
+          "ip addr add 10.#{last2-octets}.0/31 dev d#{name-suffix}" # add IP addresses to d and v
+          "ip netns exec ns#{name-suffix} ip addr add 10.#{last2-octets}.1/31 dev v#{name-suffix}"
 
-      "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
-
-      "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
-      "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], ((cmd, cb) ->
-      (err, stdout, stderr) <- child_process.exec cmd
-      if err
-        console.error 'NetNS.create error: ', cmd, stderr
-        cb err 
-      else
-        cb void
-    ), ((err) ->
-      if err then cb err else cb void
-    )
+          "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
+        ])
+      unless pre-routing-exists
+        commands.push "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
+      unless post-routing-exists
+        commands.push "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
+      async.each-series commands, ((cmd, cb) ->
+        (err, stdout, stderr) <- child_process.exec cmd
+        if err
+          console.error 'NetNS.create error: ', cmd, stderr
+          cb err 
+        else
+          cb void
+      ), ((err) ->
+        if err then cb err else cb void
+      )
   else # if exists is true # assume it exists and return success
     cb void
 
@@ -106,7 +119,7 @@ NetNS.prototype.delete = (cb) ->
   else if exists in [ true, null ] # (re-)delete if does (or does partially) exist
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    async.series [ # execute all commands regardless of errors
+    async.each-series [ # execute all commands regardless of errors
       "ip netns del ns#{name-suffix}"
       "ip link del d#{name-suffix}"
       "iptables -t nat -D PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
@@ -125,19 +138,14 @@ NetNS.prototype.delete = (cb) ->
     cb void
 
 NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be true, false, or null (partially exists)
-  last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-  pre-routing-exists = false
-  post-routing-exists = false
-  netns-exists = fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
-  (err, stdout, stderr) <~ child_process.exec 'iptables -t nat -L -n'
+  netns-exists = @_netns-exists!
+  (err, table) <~ @_get-table
   if err # unknown error so report back null to be safe
-    console.error stderr
+    console.error err
     return cb void, null
   else
-    if stdout.index-of(@ip-address) isnt -1 and stdout.index-of("to:10.#last2-octets.1") isnt -1
-      pre-routing-exists := true
-    if stdout.index-of("10.#last2-octets.0/31") isnt -1 and stdout.index-of("to:#{@ip-address}") isnt -1
-      post-routing-exists := true
+    pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
+    post-routing-exists = @_find-rule table, \POST # POSTROUTING
     tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
     if all (is true), tests
       return cb void, true
@@ -148,6 +156,9 @@ NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be
     else # guard
       return cb void, null
 
+NetNS.prototype._netns-exists = ->
+  fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
+
 NetNS.prototype.test = (cb) ->
   @_verified = false
   (err, exists) <~ @_exists
@@ -156,6 +167,7 @@ NetNS.prototype.test = (cb) ->
   else if exists is true # (re-)delete if does (or does partially) exist
     cmd = "ip netns exec #{@name} curl --insecure --max-time 10 --user-agent netns #{_test-url}"
     (err, stdout, stderr) <~ child_process.exec cmd
+    console.log stdout
     if err
       cb stderr
     else if JSON.parse(stdout).ip isnt @ip-address
@@ -165,6 +177,20 @@ NetNS.prototype.test = (cb) ->
       cb void
   else
     cb new Error "namespace doesn't seem to exist"
+
+NetNS.prototype._get-table = (cb) ->
+  (err, stdout, stderr) <~ child_process.exec 'iptables -t nat -L -n'
+  if err # unknown error so report back null to be safe
+    cb err
+  else
+    cb void, stdout
+
+NetNS.prototype._find-rule = (table, chain) ->
+  last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
+  switch chain
+  | \PRE  => (all (isnt -1), [table.index-of(@ip-address), table.index-of("to:10.#last2-octets.1")])
+  | \POST => (all (isnt -1), [table.index-of("10.#last2-octets.0/31"), table.index-of("to:#{@ip-address}")])
+  | otherwise => (throw new Error 'find-rule expects a table and a chain')
 
 #process.once \beforeExit, NetNS.delete-all
 #process.once \SIGINT, -> 
