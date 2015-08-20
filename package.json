@@ -24,6 +24,7 @@
   "homepage": "https://github.com/InstantChannel/netns",
   "dependencies": {
     "async": "^1.4.2",
+    "commander": "^2.8.1",
     "ip": "^0.3.3",
     "prelude-ls": "^1.1.2"
   }
