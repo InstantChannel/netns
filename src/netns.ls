@@ -7,7 +7,7 @@ require! {
 global <<< require \prelude-ls
 
 _namespaces         = {}
-_test-url           = \https://icanhazip.com
+_test-url           = \https://blender.instantchannelinc.com/ipecho-api/v1/
 _delete-all-retries = 5 # delete retries when calling NetNS.delete-all()
 _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 
@@ -126,7 +126,6 @@ NetNS.prototype.delete = (cb) ->
 
 NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be true, false, or null (partially exists)
   last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-
   pre-routing-exists = false
   post-routing-exists = false
   netns-exists = fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
@@ -155,20 +154,15 @@ NetNS.prototype.test = (cb) ->
   if err
     cb err
   else if exists is true # (re-)delete if does (or does partially) exist
-    cmd = "ip netns exec #{@name} curl -A www.npmjs.com/package/netns #{_test-url}"
-    data-buf = err-buf = ''
-    proc = child_process.exec cmd
-    proc
-      ..stdout.on \data, (-> data-buf += it)
-      ..stderr.on \data, (-> err-buf += it)
-    proc.on \close, (code) ~>
-      if code is not 0
-        cb new Error err-buf
-      else if data-buf is not "#{@ip-address}\n"
-        cb new Error "IP mismatch: got: #data-buf but expected: #{@ip-address}\\n"
-      else
-        @_verified = true
-        cb void
+    cmd = "ip netns exec #{@name} curl --insecure --max-time 10 --user-agent netns #{_test-url}"
+    (err, stdout, stderr) <~ child_process.exec cmd
+    if err
+      cb stderr
+    else if JSON.parse(stdout).ip isnt @ip-address
+      cb new Error "IP mismatch: got: #that but expected: #{@ip-address}"
+    else
+      @_verified = true
+      cb void
   else
     cb new Error "namespace doesn't seem to exist"
 
