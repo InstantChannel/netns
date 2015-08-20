@@ -71,7 +71,7 @@ NetNS.prototype.create = (cb) ->
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
     (err, table) <~ @_get-table
     if err # unknown error so report back null to be safe
-      console.error stderr
+      console.error err
       cb err
     else
       # handle partially existing namespaces
