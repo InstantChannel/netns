@@ -28,7 +28,11 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
   timer = set-interval (->
     unless pending
       clear-interval timer
-      existing = Obj.filter (._exists!), _namespaces
+      existing = {}
+      (err) <- async.each _namespaces, (ns, cb) ->
+        (err, exists) <- ns._exists
+        existing[ns] = ns if exists
+        cb void
       if (keys existing).length
         if retries
           <- set-timeout _, _delete-all-delay
