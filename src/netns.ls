@@ -132,7 +132,7 @@ NetNS.prototype.delete = (cb) ->
       (err, stdout, stderr) <- child_process.exec cmd
       if err
         console.error 'NetNS.delete error: ', cmd, stderr
-        cb err 
+        cb void # mask netns error as delete may have already happened
       else
         cb void
     ), ((err) ->
