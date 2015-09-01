@@ -182,6 +182,26 @@ NetNS.prototype.test = (cb) ->
   else
     cb new Error "namespace doesn't seem to exist"
 
+NetNS.prototype.hosts = (hosts, cb) ->
+  # hosts = 
+  #   "4.3.2.1": "foo foo1.com"
+  #   "8.7.6.5": "bar"
+  custom-hosts = (obj-to-pairs hosts |> map (-> it.join ' ')).join "\n"
+  hosts-data = """
+  127.0.0.1 localhost
+  #custom-hosts
+  """
+  dir = "/etc/netns/#{@name}"
+  (err) <- mkdirp dir
+  if err
+    cb err
+  else
+    (err) <- fs.write-file "#{path}/hosts", hosts-data
+    if err
+      cb err
+    else
+      cb void
+
 NetNS.prototype._get-table = (cb) ->
   (err, stdout, stderr) <~ child_process.exec 'iptables -t nat -L -n'
   if err # unknown error so report back null to be safe
