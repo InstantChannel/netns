@@ -45,7 +45,11 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
         cb void if cb
   ), 100ms
 
-NetNS.prototype.run = (command, cb, opts={ -verify }) ->
+NetNS.prototype.run = (command, cb, opts={}) ->
+  default-opts =
+    verify: false
+    cleanup: false
+  opts = default-opts <<< opts
   (create-err) <~ @create
   if create-err
     (delete-err) <- @delete # delete ((potentially) partially-created) namespace
@@ -56,6 +60,9 @@ NetNS.prototype.run = (command, cb, opts={ -verify }) ->
     run = ~>
       ns-wrap = "ip netns exec #{@name} #{command}".split ' '
       ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \pipe }
+      if opts.cleanup
+        ns-proc.on \exit, ~> 
+          <- @delete
       cb void, ns-proc
     if ! @_verified and opts.verify
       (test-err) <~ @test

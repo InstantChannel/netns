@@ -2,11 +2,11 @@
 
 require! {
   commander
-  \../lib/netns
+  \../src/netns
 }
 
 commander
-  .usage '[options] <command>'
+  .usage '[options]'
   .option '-i, --ip <ip>' 'ip to create namespace'
   .parse process.argv
 
@@ -15,16 +15,22 @@ ip-re = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9
 unless commander.ip and commander.ip.match ip-re
   console.error 'invalid ip address'
   process.exit 1
-unless commander.args.length
-  console.error 'missing command'
-  process.exit 1
 
 ns = new netns commander.ip
-(err, ns-proc) <- ns.run commander.args.join(' '), _, { -verify, +cleanup }
+(err) <- ns.create
 if err
   console.error err
   process.exit 1
-ns-proc.stdout.on \data, (-> process.stdout.write it)
-ns-proc.stderr.on \data, (-> process.stderr.write it)
+console.log '`-create'
+(err) <- ns.test
+if err
+  console.error err
+  process.exit 1
+console.log '`-test'
+(err) <- ns.delete
+if err
+  console.error err
+  process.exit 1
+console.log '`-delete'
 
 # vim:ft=ls fdm=indent
