@@ -170,16 +170,11 @@ NetNS.prototype.test = (cb) ->
     console.log stdout
     if err
       cb stderr
+    else if JSON.parse(stdout).ip isnt @ip-address
+      cb new Error "IP mismatch: got: #that but expected: #{@ip-address}"
     else
-      parsed = try
-        JSON.parse stdout
-      catch
-        cb e
-      if parsed?ip isnt @ip-address
-        cb new Error "IP mismatch: got: #that but expected: #{@ip-address}"
-      else
-        @_verified = true
-        cb void
+      @_verified = true
+      cb void
   else
     cb new Error "namespace doesn't seem to exist"
 
