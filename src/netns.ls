@@ -69,46 +69,42 @@ NetNS.prototype.create = (cb) ->
   else if exists in [ false, null ] # (re-)create if doesn't (or does partially) exist
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    (err, table) <~ @_get-table
-    if err # unknown error so report back null to be safe
-      console.error stderr
-      cb err
-    else
-      # handle partially existing namespaces
-      pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
-      post-routing-exists = @_find-rule table, \POST # POSTROUTING
-      netns-exists        = @_netns-exists!
-      commands = []
-      unless netns-exists
-        commands = commands.concat([
-          "ip netns add ns#{name-suffix}" # create ns
-          "ip netns exec ns#{name-suffix} ip link set lo up"
+    table = @_get-table!
+    # handle partially existing namespaces
+    pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
+    post-routing-exists = @_find-rule table, \POST # POSTROUTING
+    netns-exists        = @_netns-exists!
+    commands = []
+    unless netns-exists
+      commands = commands.concat([
+        "ip netns add ns#{name-suffix}" # create ns
+        "ip netns exec ns#{name-suffix} ip link set lo up"
 
-          "ip link add d#{name-suffix} type veth peer name v#{name-suffix}" # create d and v
-          "ip link set up d#{name-suffix}"
+        "ip link add d#{name-suffix} type veth peer name v#{name-suffix}" # create d and v
+        "ip link set up d#{name-suffix}"
 
-          "ip link set v#{name-suffix} netns ns#{name-suffix}" # add v to ns
-          "ip netns exec ns#{name-suffix} ip link set v#{name-suffix} up"
+        "ip link set v#{name-suffix} netns ns#{name-suffix}" # add v to ns
+        "ip netns exec ns#{name-suffix} ip link set v#{name-suffix} up"
 
-          "ip addr add 10.#{last2-octets}.0/31 dev d#{name-suffix}" # add IP addresses to d and v
-          "ip netns exec ns#{name-suffix} ip addr add 10.#{last2-octets}.1/31 dev v#{name-suffix}"
+        "ip addr add 10.#{last2-octets}.0/31 dev d#{name-suffix}" # add IP addresses to d and v
+        "ip netns exec ns#{name-suffix} ip addr add 10.#{last2-octets}.1/31 dev v#{name-suffix}"
 
-          "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
-        ])
-      unless pre-routing-exists
-        commands.push "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
-      unless post-routing-exists
-        commands.push "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-      async.each-series commands, ((cmd, cb) ->
-        (err, stdout, stderr) <- child_process.exec cmd
-        if err
-          console.error 'NetNS.create error: ', cmd, stderr
-          cb err 
-        else
-          cb void
-      ), ((err) ->
-        if err then cb err else cb void
-      )
+        "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
+      ])
+    unless pre-routing-exists
+      commands.push "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
+    unless post-routing-exists
+      commands.push "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
+    async.each-series commands, ((cmd, cb) ->
+      (err, stdout, stderr) <- child_process.exec cmd
+      if err
+        console.error 'NetNS.create error: ', cmd, stderr
+        cb err 
+      else
+        cb void
+    ), ((err) ->
+      if err then cb err else cb void
+    )
   else # if exists is true # assume it exists and return success
     cb void
 
@@ -138,23 +134,20 @@ NetNS.prototype.delete = (cb) ->
     cb void
 
 NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be true, false, or null (partially exists)
+  # XXX leaving the cb incase _exists becomes async (again)
   netns-exists = @_netns-exists!
-  (err, table) <~ @_get-table
-  if err # unknown error so report back null to be safe
-    console.error err
+  table = @_get-table!
+  pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
+  post-routing-exists = @_find-rule table, \POST # POSTROUTING
+  tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
+  if all (is true), tests
+    return cb void, true
+  else if any (is true), tests
     return cb void, null
-  else
-    pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
-    post-routing-exists = @_find-rule table, \POST # POSTROUTING
-    tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
-    if all (is true), tests
-      return cb void, true
-    else if any (is true), tests
-      return cb void, null
-    else if all (is false), tests
-      return cb void, false
-    else # guard
-      return cb void, null
+  else if all (is false), tests
+    return cb void, false
+  else # guard
+    return cb void, null
 
 NetNS.prototype._netns-exists = ->
   fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
@@ -183,12 +176,28 @@ NetNS.prototype.test = (cb) ->
   else
     cb new Error "namespace doesn't seem to exist"
 
-NetNS.prototype._get-table = (cb) ->
-  (err, stdout, stderr) <~ child_process.exec 'iptables -t nat -L -n'
-  if err # unknown error so report back null to be safe
+NetNS.prototype.hosts = (hosts, cb) ->
+  # hosts = 
+  #   "4.3.2.1": "foo foo1.com"
+  #   "8.7.6.5": "bar"
+  custom-hosts = (obj-to-pairs hosts |> map (-> it.join ' ')).join "\n"
+  hosts-data = """
+  127.0.0.1 localhost
+  #custom-hosts
+  """
+  dir = "/etc/netns/#{@name}"
+  (err) <- mkdirp dir
+  if err
     cb err
   else
-    cb void, stdout
+    (err) <- fs.write-file "#{path}/hosts", hosts-data
+    if err
+      cb err
+    else
+      cb void
+
+NetNS.prototype._get-table = -> # sync work-around:  https://github.com/nodejs/node/issues/1321
+  child_process.exec-sync 'iptables -t nat -L -n'
 
 NetNS.prototype._find-rule = (table, chain) ->
   last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
