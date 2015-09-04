@@ -205,7 +205,7 @@ NetNS.prototype.hosts = (hosts, cb) ->
   if err
     cb err
   else
-    (err) <- fs.write-file "#{path}/hosts", hosts-data
+    (err) <- fs.write-file "#{dir}/hosts", hosts-data
     if err
       cb err
     else
