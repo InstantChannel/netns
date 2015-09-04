@@ -201,7 +201,7 @@ NetNS.prototype.hosts = (hosts, cb) ->
       cb void
 
 NetNS.prototype._get-table = -> # sync work-around:  https://github.com/nodejs/node/issues/1321
-  child_process.exec-sync 'iptables -t nat -L -n'
+  child_process.exec-sync 'iptables -t nat -L -n' .to-string!
 
 NetNS.prototype._find-rule = (table, chain) ->
   last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
