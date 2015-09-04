@@ -28,7 +28,11 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
   timer = set-interval (->
     unless pending
       clear-interval timer
-      existing = Obj.filter (._exists!), _namespaces
+      existing = {}
+      (err) <- async.each _namespaces, (ns, cb) ->
+        (err, exists) <- ns._exists
+        existing[ns] = ns if exists
+        cb void
       if (keys existing).length
         if retries
           <- set-timeout _, _delete-all-delay
@@ -41,7 +45,11 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
         cb void if cb
   ), 100ms
 
-NetNS.prototype.run = (command, cb, opts={ -verify }) ->
+NetNS.prototype.run = (command, cb, opts={}) ->
+  default-opts =
+    verify: false
+    cleanup: false
+  opts = default-opts <<< opts
   (create-err) <~ @create
   if create-err
     (delete-err) <- @delete # delete ((potentially) partially-created) namespace
@@ -52,6 +60,9 @@ NetNS.prototype.run = (command, cb, opts={ -verify }) ->
     run = ~>
       ns-wrap = "ip netns exec #{@name} #{command}".split ' '
       ns-proc = child_process.spawn ns-wrap.0, ns-wrap.slice(1), { stdio: \pipe }
+      if opts.cleanup
+        ns-proc.on \exit, ~> 
+          <- @delete
       cb void, ns-proc
     if ! @_verified and opts.verify
       (test-err) <~ @test
@@ -124,7 +135,7 @@ NetNS.prototype.delete = (cb) ->
       (err, stdout, stderr) <- child_process.exec cmd
       if err
         console.error 'NetNS.delete error: ', cmd, stderr
-        cb err 
+        cb void # mask netns error as delete may have already happened
       else
         cb void
     ), ((err) ->
@@ -200,7 +211,7 @@ NetNS.prototype.hosts = (hosts, cb) ->
     else
       cb void
 
-NetNS.prototype._get-table = -> # sync work-around:  https://github.com/nodejs/node/issues/1321
+NetNS.prototype._get-table = -> # sync work-around: https://github.com/nodejs/node/issues/1321
   child_process.exec-sync 'iptables -t nat -L -n' .to-string!
 
 NetNS.prototype._find-rule = (table, chain) ->

@@ -20,7 +20,7 @@ unless commander.args.length
   process.exit 1
 
 ns = new netns commander.ip
-(err, ns-proc) <- ns.run commander.args.join(' '), _, { -verify }
+(err, ns-proc) <- ns.run commander.args.join(' '), _, { -verify, +cleanup }
 if err
   console.error err
   process.exit 1
