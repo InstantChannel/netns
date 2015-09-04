@@ -133,7 +133,7 @@ NetNS.prototype.delete = (cb) ->
   else # if exists is false # assume it exists and return success
     cb void
 
-NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be true, false, or null (partially exists)
+NetNS.prototype._exists = (cb=(->)) -> # comprehensive existence check. result can be true, false, or null (partially exists)
   # XXX leaving the cb incase _exists becomes async (again)
   netns-exists = @_netns-exists!
   table = @_get-table!
@@ -141,13 +141,17 @@ NetNS.prototype._exists = (cb) -> # comprehensive existence check. result can be
   post-routing-exists = @_find-rule table, \POST # POSTROUTING
   tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
   if all (is true), tests
-    return cb void, true
+    cb void, true
+    true
   else if any (is true), tests
-    return cb void, null
+    cb void, null
+    null
   else if all (is false), tests
-    return cb void, false
+    cb void, false
+    false
   else # guard
-    return cb void, null
+    cb void, null
+    null
 
 NetNS.prototype._netns-exists = ->
   fs.exists-sync "/var/run/netns/#{@name}" # check for existence of namespace
