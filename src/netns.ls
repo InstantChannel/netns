@@ -45,6 +45,34 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
         cb void if cb
   ), 100ms
 
+NetNS.delete-list = (list=[], cb, retries=_delete-all-retries) ->
+  # TODO constrain delete to only namespaces matched from list (will have to find the object in _namespaces)
+  namespaces = ->
+    filter (-> it.ip-address in list), _namespaces
+  pending = 0
+  (ns) <- Obj.each _, namespaces!
+  pending++
+  ns.delete (-> pending--)
+  timer = set-interval (->
+    unless pending
+      clear-interval timer
+      existing = {}
+      (err) <- async.each namespaces!, (ns, cb) ->
+        (err, exists) <- ns._exists
+        existing[ns] = ns if exists
+        cb void
+      if (keys existing).length
+        if retries
+          <- set-timeout _, _delete-all-delay
+          NetNS.delete-list list, cb, retries - 1
+        else
+          error = new Error "failed to delete some namespaces"
+          error.namespaces = existing
+          cb error if cb
+      else
+        cb void if cb
+  ), 100ms
+
 NetNS.prototype.run = (command, cb, opts={}) ->
   default-opts =
     verify: false
