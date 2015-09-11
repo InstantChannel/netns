@@ -131,7 +131,7 @@ NetNS.prototype.create = (cb) ->
 
         "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
       ])
-    unless pre-routing-exists && pre-routing
+    unless pre-routing-exists and @pre-routing
       commands.push "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
     unless post-routing-exists
       commands.push "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
@@ -179,7 +179,7 @@ NetNS.prototype._exists = (cb=(->)) -> # comprehensive existence check. result c
   table = @_get-table!
   pre-routing-exists  = @_find-rule table, \PRE # PREROUTING
   post-routing-exists = @_find-rule table, \POST # POSTROUTING
-  if pre-routing 
+  if @pre-routing 
     then tests = [ netns-exists, pre-routing-exists, post-routing-exists ]
     else tests = [ netns-exists, post-routing-exists ]
   if all (is true), tests
