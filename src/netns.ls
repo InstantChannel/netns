@@ -10,6 +10,7 @@ _namespaces         = {}
 _test-url           = \https://blender.instantchannelinc.com/ipecho-api/v1/
 _delete-all-retries = 5 # delete retries when calling NetNS.delete-all()
 _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
+_ports              = [80, 443] # route only these ports to namespaces (to limit breakage to incoming traffic (ssh, etc))
 
 function NetNS ip-address
   @ip-address = ip-address
@@ -46,7 +47,6 @@ NetNS.delete-all = (cb, retries=_delete-all-retries) ->
   ), 100ms
 
 NetNS.delete-list = (list=[], cb, retries=_delete-all-retries) ->
-  # TODO constrain delete to only namespaces matched from list (will have to find the object in _namespaces)
   namespaces = ->
     filter (-> it.ip-address in list), _namespaces
   pending = 0
@@ -131,7 +131,7 @@ NetNS.prototype.create = (cb) ->
         "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
       ])
     unless pre-routing-exists
-      commands.push "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
+      commands.push "iptables -t nat -A PREROUTING -d #{@ip-address}/32 -p tcp --match multiport --dports #{_ports.join ','} -j DNAT --to-destination 10.#{last2-octets}.1"
     unless post-routing-exists
       commands.push "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
     async.each-series commands, ((cmd, cb) ->
@@ -157,7 +157,7 @@ NetNS.prototype.delete = (cb) ->
     async.each-series [ # execute all commands regardless of errors
       "ip netns del ns#{name-suffix}"
       "ip link del d#{name-suffix}"
-      "iptables -t nat -D PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
+      "iptables -t nat -D PREROUTING -d #{@ip-address}/32 -p tcp --match multiport --dports #{_ports.join ','} -j DNAT --to-destination 10.#{last2-octets}.1"
       "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
     ], ((cmd, cb) ->
       (err, stdout, stderr) <- child_process.exec cmd
@@ -219,10 +219,10 @@ NetNS.prototype.test = (cb) ->
   else
     cb new Error "namespace doesn't seem to exist"
 
+# hosts = 
+#   "4.3.2.1": "foo foo1.com"
+#   "8.7.6.5": "bar"
 NetNS.prototype.hosts = (hosts, cb) ->
-  # hosts = 
-  #   "4.3.2.1": "foo foo1.com"
-  #   "8.7.6.5": "bar"
   custom-hosts = (obj-to-pairs hosts |> map (-> it.join ' ')).join "\n"
   hosts-data = """
   127.0.0.1 localhost
