@@ -8,6 +8,7 @@ require! {
 commander
   .usage '[options] <command>'
   .option '-i, --ip <ip>' 'ip to create namespace'
+  .option '-p, --prerouting' 'set up prerouting, allowing inbound traffic to the namespace, defaults to false'
   .parse process.argv
 
 # sanity checks
@@ -19,7 +20,7 @@ unless commander.args.length
   console.error 'missing command'
   process.exit 1
 
-ns = new netns commander.ip
+ns = new netns commander.ip commander.prerouting
 (err, ns-proc) <- ns.run commander.args.join(' '), _, { -verify, +cleanup }
 if err
   console.error err
