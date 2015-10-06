@@ -8,6 +8,7 @@ require! {
 commander
   .usage '[options] <command>'
   .option '-i, --ip <ip>' 'ip to create namespace'
+  .option '-p, --prerouting' 'add prerouting rules to nat to allow inbound traffic. defaults to false'
   .parse process.argv
 
 # sanity checks
@@ -15,6 +16,8 @@ ip-re = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9
 unless commander.ip and commander.ip.match ip-re
   console.error 'invalid ip address'
   process.exit 1
+unless commander.prerouting
+  commander.prerouting = false
 unless commander.args.length
   console.error 'missing command'
   process.exit 1
