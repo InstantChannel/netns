@@ -104,7 +104,7 @@ NetNS.prototype.run = (command, cb, opts={}) ->
       run!
 
 NetNS.prototype.create = (cb) ->
-  (err, setting) <- fs.read-file _proc-file
+  (err, setting) <~ fs.read-file _proc-file
   if err or ! setting.to-string!match /^1/
     console.error "Warning: #{_proc-file} must be set to 1 for NetNS to function properly."
     
