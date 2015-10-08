@@ -131,8 +131,9 @@ NetNS.prototype.create = (cb) ->
 
         "ip netns exec ns#{name-suffix} ip route add default via 10.#{last2-octets}.0" # set up route in ns
       ])
-    unless pre-routing-exists and @pre-routing
-      commands.push "iptables -t nat -A PREROUTING -d #{@ip-address} -j DNAT --to 10.#{last2-octets}.1"
+    if @pre-routing
+      unless pre-routing-exists
+        commands.push "iptables -t nat -A PREROUTING -d #{@ip-address}/32 -p tcp --match multiport --dports #{_ports.join ','} -j DNAT --to-destination 10.#{last2-octets}.1"
     unless post-routing-exists
       commands.push "iptables -t nat -A POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
     async.each-series commands, ((cmd, cb) ->
