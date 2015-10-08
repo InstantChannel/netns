@@ -11,6 +11,7 @@ _test-url           = \https://blender.instantchannelinc.com/ipecho-api/v1/
 _delete-all-retries = 5 # delete retries when calling NetNS.delete-all()
 _delete-all-delay   = 2000ms # delay between NetNS.delete-all() retries
 _ports              = [80, 443] # route only these ports to namespaces (to limit breakage to incoming traffic (ssh, etc))
+_proc-file          = \/proc/sys/net/ipv4/ip_forward # kernel parameter must be 1 for netns to function properly
 
 function NetNS (ip-address, pre-routing)
   @ip-address  = ip-address
@@ -103,6 +104,10 @@ NetNS.prototype.run = (command, cb, opts={}) ->
       run!
 
 NetNS.prototype.create = (cb) ->
+  (err, setting) <- fs.read-file _proc-file
+  if err or ! setting.to-string!match /^1/
+    console.error "Warning: #{_proc-file} must be set to 1 for NetNS to function properly."
+    
   (err, exists) <~ @_exists
   if err
     cb err
