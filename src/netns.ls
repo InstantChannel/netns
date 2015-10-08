@@ -161,12 +161,14 @@ NetNS.prototype.delete = (cb) ->
   else if exists in [ true, null ] # (re-)delete if does (or does partially) exist
     name-suffix  = @_long
     last2-octets = @ip-address.replace /^\d+\.\d+\./, ''
-    async.each-series [ # execute all commands regardless of errors
+    commands = [ # execute all commands regardless of errors
       "ip netns del ns#{name-suffix}"
       "ip link del d#{name-suffix}"
-      "iptables -t nat -D PREROUTING -d #{@ip-address}/32 -p tcp --match multiport --dports #{_ports.join ','} -j DNAT --to-destination 10.#{last2-octets}.1"
-      "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
-    ], ((cmd, cb) ->
+    ]
+    if @pre-routing
+      commands.push "iptables -t nat -D PREROUTING -d #{@ip-address}/32 -p tcp --match multiport --dports #{_ports.join ','} -j DNAT --to-destination 10.#{last2-octets}.1"
+    commands.push "iptables -t nat -D POSTROUTING -s 10.#{last2-octets}.0/31 -j SNAT --to #{@ip-address}"
+    async.each-series commands, ((cmd, cb) ->
       (err, stdout, stderr) <- child_process.exec cmd
       if err
         console.error 'NetNS.delete error: ', cmd, stderr
